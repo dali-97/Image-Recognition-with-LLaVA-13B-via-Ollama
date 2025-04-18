@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Recognition</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        #upload-form {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #file {
+            margin-bottom: 15px;
+            display: block;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+        #description-container {
+            margin-top: 20px;
+        }
+        #description {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            border-left: 4px solid #3498db;
+            white-space: pre-wrap;
+            min-height: 100px;
+        }
+        #progress {
+            margin-top: 10px;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        .error {
+            color: #e74c3c;
+            border-left-color: #e74c3c !important;
+        }
+        .loading {
+            color: #7f8c8d;
+        }
+        #image-preview {
+            max-width: 100%;
+            max-height: 300px;
+            margin: 15px 0;
+            display: none;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Recognition with Ollama</h1>
+    
+    <form id="upload-form" enctype="multipart/form-data">
+      <input type="file" id="file" name="file" accept="image/*" required />
+      <img id="image-preview" alt="Image preview" />
+      <button type="submit" id="submit-btn">Upload & Describe</button>
+      <div id="progress"></div>
+    </form>
+    
+    <div id="description-container">
+        <h3>Image Description:</h3>
+        <div id="description">No image uploaded yet.</div>
+    </div>
+
+    <script>
+      // Image preview functionality
+      document.getElementById('file').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const preview = document.getElementById('image-preview');
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+          preview.src = e.target.result;
+          preview.style.display = 'block';
+        }
+        
+        reader.readAsDataURL(file);
+      });
+
+      // Form submission handler
+      document.getElementById('upload-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        
+        const fileInput = document.getElementById('file');
+        const submitBtn = document.getElementById('submit-btn');
+        const descriptionElement = document.getElementById('description');
+        const progressElement = document.getElementById('progress');
+        
+        if (!fileInput.files.length) {
+            descriptionElement.textContent = 'Please select an image first.';
+            descriptionElement.classList.add('error');
+            return;
+        }
+        
+        // Reset UI state
+        descriptionElement.classList.remove('error');
+        descriptionElement.textContent = 'Analyzing image...';
+        descriptionElement.classList.add('loading');
+        submitBtn.disabled = true;
+        progressElement.textContent = 'Preparing image...';
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        
+        try {
+          // Set up timeout (60 seconds)
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+            controller.abort();
+            throw new Error('Processing took too long. Please try a smaller image.');
+          }, 60000);
+          
+          progressElement.textContent = 'Sending to server...';
+          
+          const response = await fetch('http://localhost:8000/describe-image', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          progressElement.textContent = 'Processing response...';
+          const data = await response.json();
+          
+          if (response.ok) {
+            descriptionElement.textContent = data.description;
+            progressElement.textContent = 'Analysis complete!';
+          } else {
+            descriptionElement.textContent = data.error || 'Failed to get description.';
+            descriptionElement.classList.add('error');
+            progressElement.textContent = 'Error occurred';
+          }
+          
+        } catch (error) {
+          console.error('Error:', error);
+          descriptionElement.textContent = error.message || 'An error occurred during the upload.';
+          descriptionElement.classList.add('error');
+          progressElement.textContent = 'Error: ' + (error.message || 'Request failed');
+        } finally {
+          descriptionElement.classList.remove('loading');
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
+</body>
+</html>
